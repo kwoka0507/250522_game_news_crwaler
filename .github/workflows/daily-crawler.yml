@@ -1,86 +1,39 @@
-name: Daily Game News Crawler
+name: 중국 게임 뉴스 크롤링
 
 on:
   schedule:
-    - cron: '0 23 * * *'  # UTC 23:00 = 한국시간 오전 8:00
-  workflow_dispatch:      # 수동 실행 가능
+    # 매일 오전 8시에 실행(UTC 기준, 한국 시간으로는 17시)
+    - cron: '0 8 * * *'
+  workflow_dispatch:  # 수동 실행 옵션
+
+# 저장소에 대한 쓰기 권한 부여
+permissions:
+  contents: write
 
 jobs:
   crawl:
     runs-on: ubuntu-latest
-    timeout-minutes: 30   # 30분 타임아웃
     
     steps:
-    - name: Checkout repository
+    - name: 리포지토리 체크아웃
       uses: actions/checkout@v4
       
-    - name: Setup Node.js
+    - name: Node.js 설정
       uses: actions/setup-node@v4
       with:
         node-version: '18'
-        cache: 'npm'
-    
-    # package.json이 없을 경우를 대비한 의존성 직접 설치
-    - name: Install dependencies
-      run: |
-        npm init -y || true
-        npm install puppeteer@21.6.1 rss-parser@3.13.0 axios@1.6.2
         
-    - name: Install system dependencies
+    - name: 의존성 설치
       run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          fonts-liberation \
-          libasound2 \
-          libatk-bridge2.0-0 \
-          libatk1.0-0 \
-          libatspi2.0-0 \
-          libcups2 \
-          libdbus-1-3 \
-          libdrm2 \
-          libgtk-3-0 \
-          libnspr4 \
-          libnss3 \
-          libxcomposite1 \
-          libxdamage1 \
-          libxfixes3 \
-          libxrandr2 \
-          libxss1 \
-          libxtst6 \
-          xdg-utils
-          
-    - name: Run crawler
-      run: node improved-game-news-crawler.js
-      env:
-        GITHUB_ACTIONS: 'true'
-        PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 'false'
-        WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
-        
-    - name: Upload results
-      uses: actions/upload-artifact@v4
-      with:
-        name: crawling-results-${{ github.run_number }}
-        path: "*.json"
-        retention-days: 7
-        
-    - name: Display results summary
+        npm install
+      
+    - name: 크롤링 스크립트 실행
+      run: node improved-chinese-game-crawler.js
+      
+    - name: 결과 파일 커밋 및 푸시
       run: |
-        echo "=== 크롤링 결과 요약 ==="
-        for file in *.json; do
-          if [ -f "$file" ]; then
-            echo "파일: $file"
-            echo "기사 수: $(jq '. | length' "$file")"
-            echo "소스별 통계:"
-            jq -r 'group_by(.source) | .[] | "\(.[0].source): \(length)개"' "$file"
-            echo "---"
-          fi
-        done
-        
-    - name: Commit and push results (optional)
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add *.json || true
-        git diff --staged --quiet || git commit -m "Daily crawling results - $(date '+%Y-%m-%d %H:%M:%S')" || true
-        git push origin main || true
-      continue-on-error: true
+        git config --global user.name 'GitHub Actions'
+        git config --global user.email 'actions@github.com'
+        git add *.json *.html
+        git commit -m "자동 크롤링 결과 업데이트 $(date +'%Y-%m-%d')" || echo "No changes to commit"
+        git push
