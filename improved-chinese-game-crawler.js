@@ -1,4 +1,4 @@
-// improved-game-news-crawler.js - GitHub Actions 버전
+// improved-chinese-game-crawler.js - GitHub Actions 버전
 const puppeteer = require('puppeteer');
 const Parser = require('rss-parser');
 const fs = require('fs');
