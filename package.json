@@ -1,0 +1,28 @@
+{
+  "name": "chinese-game-news-crawler",
+  "version": "1.0.0",
+  "description": "중국/대만 게임 뉴스 크롤러",
+  "main": "improved-game-news-crawler.js",
+  "scripts": {
+    "start": "node improved-game-news-crawler.js",
+    "crawl": "node improved-game-news-crawler.js"
+  },
+  "keywords": [
+    "crawler",
+    "game-news",
+    "china",
+    "taiwan",
+    "puppeteer",
+    "rss"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "puppeteer": "^21.6.1",
+    "rss-parser": "^3.13.0",
+    "axios": "^1.6.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
