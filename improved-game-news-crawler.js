@@ -965,18 +965,16 @@ async function extractDetailedContent(browser, articles, site) {
       } catch (error) {
         console.error('날짜 형식 정규화 중 오류:', error.message);
       }
-      
-      // GitHub Actions 환경에서 실행되는 경우 날짜 체크를 완화
-      const isGitHubActions = process.env.GITHUB_ACTIONS === 'true';
-      
+            
       // 날짜가 없거나 유효하지 않은 경우 기본값 사용
       if (!date || !/\d{4}-\d{2}-\d{2}/.test(date)) {
         console.warn(`⚠️ 유효하지 않은 날짜 "${date}" → 어제로 fallback`);
         date = getYesterday();
       }
       
-      // 날짜 필터링 (GitHub Actions에서는 더 관대하게)
-      const isRecent = isGitHubActions ? true : (isTodayOrYesterday(date) || isWithin24HoursFromString(article.date));
+      // 날짜 필터링
+      const isRecent = isTodayOrYesterday(date) || isWithin24HoursFromString(date);
+      if (!isRecent) continue;
 
       // Youxituoluo 사이트는 날짜 형식이 이상한 경우 수정
       if (article.source === 'Youxituoluo') {
