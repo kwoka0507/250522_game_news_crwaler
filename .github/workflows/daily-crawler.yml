@@ -28,7 +28,7 @@ jobs:
         npm install
       
     - name: 크롤링 스크립트 실행
-      run: node improved-chinese-game-crawler.js
+      run: node improved-game-news-crawler.js
       
     - name: 결과 파일 커밋 및 푸시
       run: |
