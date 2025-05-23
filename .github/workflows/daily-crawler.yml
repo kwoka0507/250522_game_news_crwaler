@@ -3,7 +3,7 @@ name: 중화권 게임 뉴스 크롤링
 on:
   schedule:
     # 매일 오전 8시에 실행(UTC 기준, 한국 시간으로는 17시)
-    - cron: '0 8 * * *'
+    - cron: '0 23 * * *'
   workflow_dispatch:  # 수동 실행 옵션
 
 # 저장소에 대한 쓰기 권한 부여
