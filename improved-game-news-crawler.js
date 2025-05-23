@@ -1,4 +1,4 @@
-// improved-game-news-crawler.js - GitHub Actions 버전
+// improved-game-news-crawler.js
 const puppeteer = require('puppeteer');
 const Parser = require('rss-parser');
 const fs = require('fs');
@@ -207,19 +207,19 @@ async function crawlRSS() {
     const now = new Date();
 
     // 24시간 이내 기사로 변경
-    const recentArticles = feed.items.filter(item => {
-      const pubDate = new Date(item.pubDate);
-      const timeDiff = now - pubDate;
-      const within24Hours = timeDiff <= 24 * 60 * 60 * 1000;
-      
-      if (within24Hours) {
-        console.log(`RSS 기사: ${item.title} - 발행일: ${item.pubDate} (${(timeDiff / (60 * 60 * 1000)).toFixed(1)}시간 전)`);
-      }
-      
-      return within24Hours;
-    });
+const recentArticles = feed.items.filter(item => {
+  const pubDate = new Date(item.pubDate);
+  const timeDiff = now - pubDate;
+  const within24Hours = timeDiff <= 24 * 60 * 60 * 1000;
+  
+  if (within24Hours) {
+    console.log(`RSS 기사: ${item.title} - 발행일: ${item.pubDate} (${(timeDiff / (60 * 60 * 1000)).toFixed(1)}시간 전)`);
+  }
+  
+  return within24Hours;
+});
 
-    console.log(`📋 RSS에서 24시간 이내 ${recentArticles.length}건 발견, 전체 본문 추출...`);
+console.log(`📋 RSS에서 24시간 이내 ${recentArticles.length}건 발견, 전체 본문 추출...`);
 
     // RSS에서 직접 전체 본문 추출
     const detailedArticles = recentArticles.map(item => {
@@ -702,6 +702,15 @@ async function extractArticles(page, site) {
             console.log(`🧹 광고 필터링: ${extractedArticles.length} -> ${filteredArticles.length}`);
             articles.push(...filteredArticles);
             break;
+              // 👉 Youxituoluo는 24시간 이내 기사만
+            if (site.filterBy === '24h') {
+                finalFallback = filteredFallbackArticles.filter(article => {
+                    const parsed = parseRelativeOrAbsoluteDate(article.date);
+                    return isWithin24Hours(parsed);
+                });
+                console.log(`🕒 24시간 필터링 후: ${finalFallback.length}개`);
+            }
+            articles.push(...filteredFallbackArticles);
           }
         }
       } catch (error) {
@@ -762,25 +771,25 @@ async function extractArticles(page, site) {
       }, fallbackArticles);
       
       if (filteredFallbackArticles.length > 0) {
-        console.log(`✅ 대체 방법으로 ${filteredFallbackArticles.length}개 기사 발견`);
-        
-        // Youxituoluo 사이트는 모든 기사를 일단 추가 (필터링 건너뛰기)
-        if (site.name === 'Youxituoluo') {
-          console.log(`🕒 Youxituoluo 사이트는 모든 기사를 일단 추가합니다.`);
-          articles.push(...filteredFallbackArticles);
-        } else if (site.filterBy === '24h') {
-          // 다른 사이트의 경우 기존 24시간 필터링 적용
-          const finalFallback = filteredFallbackArticles.filter(article => {
-            const parsed = parseRelativeOrAbsoluteDate(article.date);
-            return isWithin24Hours(parsed);
-          });
-          console.log(`🕒 24시간 필터링 후: ${finalFallback.length}개`);
-          articles.push(...finalFallback);
-        } else {
-          articles.push(...filteredFallbackArticles);
-        }
-      }
+    console.log(`✅ 대체 방법으로 ${filteredFallbackArticles.length}개 기사 발견`);
+    
+    // Youxituoluo 사이트는 모든 기사를 일단 추가 (필터링 건너뛰기)
+    if (site.name === 'Youxituoluo') {
+      console.log(`🕒 Youxituoluo 사이트는 모든 기사를 일단 추가합니다.`);
+      articles.push(...filteredFallbackArticles);
+    } else if (site.filterBy === '24h') {
+      // 다른 사이트의 경우 기존 24시간 필터링 적용
+      const finalFallback = filteredFallbackArticles.filter(article => {
+        const parsed = parseRelativeOrAbsoluteDate(article.date);
+        return isWithin24Hours(parsed);
+      });
+      console.log(`🕒 24시간 필터링 후: ${finalFallback.length}개`);
+      articles.push(...finalFallback);
+    } else {
+      articles.push(...filteredFallbackArticles);
     }
+  }
+}
     
   } catch (error) {
     console.error('❌ 기사 추출 중 오류 발생:', error.message);
@@ -884,7 +893,7 @@ async function extractDetailedContent(browser, articles, site) {
             }
             
             const bodyText = document.body.innerText;
-            const fullDateRegex = /\d{4}[年\/\-\.\s]?\d{1,2}[월\/\-\.\s]?\d{1,2}[일]?/g;
+            const fullDateRegex = /\d{4}[年\/\-\.\s]?\d{1,2}[月\/\-\.\s]?\d{1,2}[日]?/g;
             const allDates = bodyText.match(fullDateRegex);
             if (allDates && allDates.length > 0) {
               return allDates[0];
@@ -903,15 +912,8 @@ async function extractDetailedContent(browser, articles, site) {
         }
       }
       
-      // 날짜 형식 정규화 (오늘 한국 시간 기준)
+      // 날짜 형식 정규화
       try {
-        const koreaTime = new Date().toLocaleDateString('ko-KR', {
-          timeZone: 'Asia/Seoul',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit'
-        }).replace(/\./g, '-').replace(/\s/g, '').replace(/-$/, '');
-        
         const currentYear = new Date().getFullYear();
         
         // MM 월 DD 일 형식 처리 (예: "05 월 18 일")
@@ -961,46 +963,67 @@ async function extractDetailedContent(browser, articles, site) {
           }
         }
         
+        // 슬래시 형식 변환
+        if (date && date.includes('/')) {
+          const parts = date.split('/');
+          if (parts.length === 3) {
+            const year = parts[0];
+            const month = parts[1].padStart(2, '0');
+            const day = parts[2].padStart(2, '0');
+            date = `${year}-${month}-${day}`;
+          }
+        }
+        
+        // 점(.) 형식 변환
+        if (date && date.includes('.')) {
+          const parts = date.split('.');
+          if (parts.length === 3) {
+            const year = parts[0];
+            const month = parts[1].padStart(2, '0');
+            const day = parts[2].padStart(2, '0');
+            date = `${year}-${month}-${day}`;
+          }
+        }
+
         console.log(`📅 추출된 날짜: ${date}`);
       } catch (error) {
         console.error('날짜 형식 정규화 중 오류:', error.message);
       }
-            
+      
       // 날짜가 없거나 유효하지 않은 경우 기본값 사용
       if (!date || !/\d{4}-\d{2}-\d{2}/.test(date)) {
         console.warn(`⚠️ 유효하지 않은 날짜 "${date}" → 어제로 fallback`);
         date = getYesterday();
       }
       
-      // 날짜 필터링
-      const isRecent = isTodayOrYesterday(date) || isWithin24HoursFromString(date);
-      if (!isRecent) continue;
+      // extractDetailedContent 함수 내부
+const isRecent = isTodayOrYesterday(date) || isWithin24HoursFromString(article.date);
 
-      // Youxituoluo 사이트는 날짜 형식이 이상한 경우 수정
-      if (article.source === 'Youxituoluo') {
-        // 날짜 형식이 이상한 경우 (1107-77-02 같은) 현재 시간 기준 24시간 내 기사로 간주
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date.includes('1107')) {
-          console.log(`ℹ️ [Youxituoluo] 날짜 형식 이상, 24시간 이내 기사로 처리: ${date}`);
-          // 기사 처리 계속 진행
-        } else if (!isGitHubActions) {
-          // 명확한 날짜가 있는 경우 24시간 이내인지 확인 (로컬에서만)
-          const articleDate = new Date(date);
-          const now = new Date();
-          const timeDiff = now - articleDate;
-          const within24Hours = timeDiff <= 24 * 60 * 60 * 1000;
-          
-          if (!within24Hours) {
-            console.log(`❌ [Youxituoluo] 24시간 이내 기사가 아니므로 건너뛰기: ${date}`);
-            await page.close();
-            continue;
-          }
-        }
-      } else if (!isRecent && !isGitHubActions) {
-        // 다른 사이트는 기존처럼 최근 기사 체크 (로컬에서만)
-        console.log(`❌ 최근 기사가 아니므로 건너뛰기: ${date} (${article.date})`);
-        await page.close();
-        continue;
-      }
+// Youxituoluo 사이트는 날짜 형식이 이상한 경우 수정
+if (article.source === 'Youxituoluo') {
+  // 날짜 형식이 이상한 경우 (1107-77-02 같은) 현재 시간 기준 24시간 내 기사로 간주
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date.includes('1107')) {
+    console.log(`ℹ️ [Youxituoluo] 날짜 형식 이상, 24시간 이내 기사로 처리: ${date}`);
+    // 기사 처리 계속 진행
+  } else {
+    // 명확한 날짜가 있는 경우 24시간 이내인지 확인
+    const articleDate = new Date(date);
+    const now = new Date();
+    const timeDiff = now - articleDate;
+    const within24Hours = timeDiff <= 24 * 60 * 60 * 1000;
+    
+    if (!within24Hours) {
+      console.log(`❌ [Youxituoluo] 24시간 이내 기사가 아니므로 건너뛰기: ${date}`);
+      await page.close();
+      continue;
+    }
+  }
+} else if (!isRecent) {
+  // 다른 사이트는 기존처럼 최근 기사 체크
+  console.log(`❌ 최근 기사가 아니므로 건너뛰기: ${date} (${article.date})`);
+  await page.close();
+  continue;
+}
       
       // 본문 내용 추출
       let content = '';
@@ -1099,49 +1122,145 @@ async function extractDetailedContent(browser, articles, site) {
         });
       }
       
-      // 이미지 URL 추출 (GitHub Actions 환경에서 더 안전하게)
-      let imageUrl = '';
-      try {
-        imageUrl = await page.evaluate(() => {
-          // Open Graph 이미지 우선 확인
-          const ogImage = document.querySelector('meta[property="og:image"]');
-          if (ogImage) {
-            const ogSrc = ogImage.getAttribute('content');
-            if (ogSrc && !ogSrc.includes('logo') && !ogSrc.includes('default') && !ogSrc.includes('avatar')) {
-              return ogSrc;
-            }
-          }
+      // 이미지 URL 추출 (개선된 버전)
+const imageUrl = await page.evaluate(() => {
+  // 1. Open Graph 이미지 우선 확인 (로고가 아닌 경우만)
+  const ogImage = document.querySelector('meta[property="og:image"]');
+  if (ogImage) {
+    const ogSrc = ogImage.getAttribute('content');
+    // 로고나 기본 이미지가 아닌 경우만 사용
+    if (ogSrc && !ogSrc.includes('logo') && !ogSrc.includes('default') && !ogSrc.includes('avatar')) {
+      return ogSrc;
+    }
+  }
 
-          // 본문 내 첫 번째 이미지
-          const contentSelectors = [
-            '.article-content img', '.news-content img', '.content img', '.post-content img'
-          ];
-          
-          for (const selector of contentSelectors) {
-            const img = document.querySelector(selector);
-            if (img) {
-              const src = img.src || img.getAttribute('data-src') || img.getAttribute('data-original');
-              if (src && !src.includes('logo') && !src.includes('wx_code') && !src.includes('avatar')) {
-                return src;
-              }
-            }
-          }
-          
-          // 첫 번째 이미지 (로고가 아닌 경우)
-          const allImages = Array.from(document.querySelectorAll('img'));
-          for (const img of allImages) {
-            const src = img.src || img.getAttribute('data-src') || img.getAttribute('data-original');
-            if (src && !src.includes('logo') && !src.includes('wx_code') && !src.includes('avatar')) {
-              return src;
-            }
-          }
-          
-          return '';
-        });
-      } catch (error) {
-        console.error('이미지 추출 중 오류:', error.message);
-        imageUrl = '';
+  // 2. 기사 본문 내 이미지 우선 검색
+  const contentSelectors = [
+    '.article-content', '.news-content', '.content', '.post-content', 
+    '.entry-content', '.detail-content', '.news-detail', '.article-detail',
+    'article', '.article', '.post', 'main'
+  ];
+  
+  for (const selector of contentSelectors) {
+    const contentArea = document.querySelector(selector);
+    if (contentArea) {
+      const contentImages = Array.from(contentArea.querySelectorAll('img'));
+      const validContentImages = contentImages.filter(img => {
+        const src = img.src || img.getAttribute('data-src') || img.getAttribute('data-original');
+        if (!src) return false;
+        
+        // 로고, 아바타, 광고 이미지 제외
+        const excludePatterns = ['logo', 'avatar', 'ad', 'banner', 'icon', 'btn', 'button', 'wx_code'];
+        if (excludePatterns.some(pattern => src.toLowerCase().includes(pattern))) {
+          return false;
+        }
+        
+        // 크기 체크
+        const width = parseInt(img.getAttribute('width')) || img.naturalWidth || img.offsetWidth;
+        const height = parseInt(img.getAttribute('height')) || img.naturalHeight || img.offsetHeight;
+        
+        return width > 200 && height > 150;
+      });
+      
+      if (validContentImages.length > 0) {
+        return validContentImages[0].src || validContentImages[0].getAttribute('data-src') || validContentImages[0].getAttribute('data-original');
       }
+    }
+  }
+  
+  // 3. Youxituoluo 특화 이미지 선택자
+  const youxituoluoSelectors = [
+    '.news-image img',
+    '.article-image img', 
+    '.post-thumbnail img',
+    '.featured-image img',
+    '.news-item img:not([class*="logo"]):not([class*="avatar"])',
+    'img[src*="youxituoluo"]:not([src*="logo"]):not([src*="wx_code"])'
+  ];
+  
+  for (const selector of youxituoluoSelectors) {
+    const img = document.querySelector(selector);
+    if (img) {
+      const src = img.src || img.getAttribute('data-src') || img.getAttribute('data-original');
+      if (src && !src.includes('logo') && !src.includes('wx_code') && !src.includes('avatar')) {
+        const width = parseInt(img.getAttribute('width')) || img.naturalWidth || img.offsetWidth;
+        const height = parseInt(img.getAttribute('height')) || img.naturalHeight || img.offsetHeight;
+        
+        if (width > 200 && height > 150) {
+          return src;
+        }
+      }
+    }
+  }
+  
+  // 4. 일반적인 큰 이미지 검색 (더 엄격한 필터링)
+  const allImages = Array.from(document.querySelectorAll('img'));
+  const filteredImages = allImages.filter(img => {
+    const src = img.src || img.getAttribute('data-src') || img.getAttribute('data-original');
+    if (!src) return false;
+    
+    // 제외할 패턴 확장
+    const excludePatterns = [
+      'logo', 'avatar', 'ad', 'banner', 'icon', 'btn', 'button', 
+      'wx_code', 'qr', 'share', 'social', 'footer', 'header',
+      'nav', 'menu', 'sidebar', 'widget', 'comment'
+    ];
+    
+    const srcLower = src.toLowerCase();
+    const altLower = (img.alt || '').toLowerCase();
+    const classLower = (img.className || '').toLowerCase();
+    
+    // 패턴 매칭으로 제외
+    if (excludePatterns.some(pattern => 
+      srcLower.includes(pattern) || altLower.includes(pattern) || classLower.includes(pattern)
+    )) {
+      return false;
+    }
+    
+    // 크기 필터링
+    const width = parseInt(img.getAttribute('width')) || img.naturalWidth || img.offsetWidth;
+    const height = parseInt(img.getAttribute('height')) || img.naturalHeight || img.offsetHeight;
+    
+    // 최소 크기 요구사항
+    if (width < 250 || height < 180) {
+      return false;
+    }
+    
+    // 너무 긴 이미지는 배너일 가능성이 높음
+    if (width > 0 && height > 0 && width / height > 4) {
+      return false;
+    }
+    
+    return true;
+  });
+  
+  // 크기순으로 정렬하여 가장 큰 이미지 선택
+  if (filteredImages.length > 0) {
+    const sortedImages = filteredImages.sort((a, b) => {
+      const aWidth = parseInt(a.getAttribute('width')) || a.naturalWidth || a.offsetWidth || 0;
+      const aHeight = parseInt(a.getAttribute('height')) || a.naturalHeight || a.offsetHeight || 0;
+      const bWidth = parseInt(b.getAttribute('width')) || b.naturalWidth || b.offsetWidth || 0;
+      const bHeight = parseInt(b.getAttribute('height')) || b.naturalHeight || b.offsetHeight || 0;
+      
+      return (bWidth * bHeight) - (aWidth * aHeight);
+    });
+    
+    const bestImage = sortedImages[0];
+    return bestImage.src || bestImage.getAttribute('data-src') || bestImage.getAttribute('data-original');
+  }
+  
+  // 5. 최후의 수단: 첫 번째 이미지 (단, 로고가 아닌 경우)
+  if (allImages.length > 0) {
+    for (const img of allImages) {
+      const src = img.src || img.getAttribute('data-src') || img.getAttribute('data-original');
+      if (src && !src.includes('logo') && !src.includes('wx_code') && !src.includes('avatar')) {
+        return src;
+      }
+    }
+  }
+  
+  return '';
+});
       
       // 기사 요약 생성
       let summary = '';
@@ -1197,10 +1316,10 @@ async function extractDetailedContent(browser, articles, site) {
   return detailedArticles;
 }
 
-// 웹훅 전송 함수 (GitHub Actions 환경 고려)
+// 웹훅 전송 함수
 async function sendWebhook(results) {
   try {
-    const webhookUrl = process.env.WEBHOOK_URL || 'https://hook.eu2.make.com/c12mntjqlejllxuy542usubxqgggcwyj';
+    const webhookUrl = 'https://hook.eu2.make.com/c12mntjqlejllxuy542usubxqgggcwyj';
 
     const agent = new https.Agent({
       rejectUnauthorized: false
@@ -1213,63 +1332,46 @@ async function sendWebhook(results) {
         headers: {
           'Content-Type': 'application/json'
         },
-        httpsAgent: agent,
-        timeout: 30000
+        httpsAgent: agent
       }
     );
 
     console.log('🚀 웹훅 전송 성공:', response.status);
-    return true;
   } catch (e) {
     console.error('❌ 웹훅 전송 실패:', e.message);
-    return false;
   }
 }
 
-// 메인 함수 (GitHub Actions 환경 최적화)
+// 메인 함수
 async function runUnifiedCrawler() {
   console.log('🚀 통합 중국/대만 게임 뉴스 크롤러 시작');
-  
-  const isGitHubActions = process.env.GITHUB_ACTIONS === 'true';
-  if (isGitHubActions) {
-    console.log('🤖 GitHub Actions 환경에서 실행 중');
-  }
-  
   console.log(`📅 최근 기사를 수집합니다:`);
-  console.log(`   - RSS: 24시간 이내`);
-  console.log(`   - 웹페이지: 최근 기사`);
+  console.log(`   - RSS: 48시간 이내 (약 2일간)`);
+  console.log(`   - 웹페이지: 오늘(${getCurrentDate()}) + 어제(${getYesterday()})`);
   
   let allResults = [];
   
-  // Puppeteer 브라우저 시작 (GitHub Actions용 설정)
+  // Puppeteer 브라우저 시작
   const browser = await puppeteer.launch({
     headless: true,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--disable-web-security',
-      '--disable-features=VizDisplayCompositor',
       '--window-size=1920,1080',
-      '--single-process', // GitHub Actions에서 메모리 절약
-      '--no-zygote'
+      '--disable-features=IsolateOrigins,site-per-process',
+      '--disable-web-security',
     ]
   });
   
   try {
     // 1. RSS 크롤링 실행 (RSS에서 직접 전체 본문 추출)
-    console.log('\n📡 RSS 크롤링 시작...');
     const rssResults = await crawlRSS();
     allResults = [...allResults, ...rssResults];
     
     // 2. 웹페이지 크롤링 실행
-    console.log('\n🌐 웹페이지 크롤링 시작...');
     const webResults = await crawlWebsites(browser);
     allResults = [...allResults, ...webResults];
-    
-  } catch (error) {
-    console.error('❌ 크롤링 중 오류 발생:', error.message);
   } finally {
     await browser.close();
     console.log('👋 브라우저 종료됨');
@@ -1308,9 +1410,7 @@ async function runUnifiedCrawler() {
       title: "샘플 데이터 - 수집된 기사 없음",
       url: "https://example.com",
       date: yesterday,
-      summary: "수집된 크롤링 결과가 없어 생성된 샘플 데이터입니다.",
       content: "수집된 크롤링 결과가 없어 생성된 샘플 데이터입니다.",
-      image: "",
       source: "Sample",
       region: "샘플",
       error: "수집된 기사 없음"
@@ -1319,31 +1419,15 @@ async function runUnifiedCrawler() {
   
   // 4. 결과를 JSON 파일로 저장
   const dateStr = getCurrentDate();
-  const fileName = `test_game_news_crawled_on_${dateStr}.json`;
+  const fileName = `unified_game_news_recent_crawled_on_${dateStr}.json`;
   
-  try {
-    fs.writeFileSync(fileName, JSON.stringify(allResults, null, 2), 'utf8');
-    console.log(`📁 JSON 파일 생성 완료: ${fileName}`);
-  } catch (error) {
-    console.error('❌ JSON 파일 저장 실패:', error.message);
-  }
+  fs.writeFileSync(fileName, JSON.stringify(allResults, null, 2));
+  console.log(`📁 JSON 파일 생성 완료: ${fileName}`);
   
   // 5. 웹훅 전송
-  console.log('\n🚀 웹훅 전송 시도...');
-  const webhookSuccess = await sendWebhook(allResults);
+  await sendWebhook(allResults);
   
-  if (webhookSuccess) {
-    console.log('✅ 웹훅 전송 성공!');
-  } else {
-    console.log('❌ 웹훅 전송 실패');
-  }
-  
-  console.log('\n✅ 통합 크롤러 실행 완료!');
-  
-  // GitHub Actions 환경에서 프로세스 종료 코드 설정
-  if (isGitHubActions) {
-    process.exit(webhookSuccess ? 0 : 1);
-  }
+  console.log('✅ 통합 크롤러 실행 완료!');
 }
 
 // 크롤러 실행
@@ -1352,39 +1436,18 @@ runUnifiedCrawler().catch(err => {
   
   // 오류가 발생해도 결과 파일 생성
   const dateStr = getCurrentDate();
-  const errorResult = [{
-    title: '크롤링 중 오류 발생',
-    url: 'https://example.com/error',
-    date: getYesterday(),
-    summary: '크롤링 중 치명적 오류 발생: ' + err.message,
-    content: '크롤링 중 치명적 오류 발생: ' + err.message,
-    image: '',
-    source: 'Error',
-    region: 'Error',
-    error: true
-  }];
+  fs.writeFileSync(
+    `unified_game_news_recent_crawled_on_${dateStr}.json`,
+    JSON.stringify([
+      {
+        title: '크롤링 중 오류 발생',
+        date: getYesterday(),
+        content: '크롤링 중 치명적 오류 발생: ' + err.message,
+        source: 'Error',
+        region: 'Error'
+      }
+    ], null, 2)
+  );
   
-  try {
-    fs.writeFileSync(
-      `test_game_news_crawled_on_${dateStr}.json`,
-      JSON.stringify(errorResult, null, 2),
-      'utf8'
-    );
-    console.log('📁 오류 결과 파일 생성 완료');
-  } catch (writeError) {
-    console.error('❌ 오류 결과 파일 저장 실패:', writeError.message);
-  }
-  
-  // 웹훅으로 오류 정보 전송 시도
-  sendWebhook(errorResult).then((success) => {
-    if (success) {
-      console.log('🚀 오류 정보 웹훅 전송 성공');
-    } else {
-      console.log('❌ 오류 정보 웹훅 전송 실패');
-    }
-    
-    process.exit(1);
-  }).catch(() => {
-    process.exit(1);
-  });
+  process.exit(1);
 });
