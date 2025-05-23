@@ -305,19 +305,63 @@ async function crawlWebsites(browser) {
   const sites = [
     // 중국 사이트
     {
-      name: 'Youxituoluo',
-      url: 'https://www.youxituoluo.com/',
-      region: '중국',
-      selectors: {
-        articles: ['.news-item'],
-        title: ['.news-title'],
-        link: ['a'],
-        date: ['.item-time'],
-        content: ['.news-detail'],
-        adSelector: ['.ad', '.sponsored']
-      },
-      filterBy: '24h'  // 24시간 이내 기사만 수집하는 설정 추가
-    },
+  name: 'Youxituoluo',
+  url: 'https://www.youxituoluo.com/',
+  region: '중국',
+  selectors: {
+    articles: [
+      '.news-list .news-item',
+      '.article-list .article-item', 
+      '.post-list .post-item',
+      '.content-list li',
+      'li[class*="news"]',
+      'div[class*="news"]',
+      '.list-item',
+      'article'
+    ],
+    title: [
+      '.news-title a',
+      '.article-title a',
+      '.post-title a',
+      'h2 a',
+      'h3 a',
+      '.title a',
+      'a[href*="/news/"]',
+      'a[href*="/article/"]'
+    ],
+    link: [
+      '.news-title a',
+      '.article-title a', 
+      '.post-title a',
+      'h2 a',
+      'h3 a',
+      '.title a',
+      'a[href*="/news/"]',
+      'a[href*="/article/"]'
+    ],
+    date: [
+      '.news-time',
+      '.article-time',
+      '.post-time',
+      '.publish-time',
+      '.date',
+      '.time',
+      'time',
+      '.meta-time',
+      'span[class*="time"]',
+      'span[class*="date"]'
+    ],
+    content: [
+      '.news-content',
+      '.article-content',
+      '.post-content',
+      '.content',
+      '.detail-content'
+    ],
+    adSelector: ['.ad', '.sponsored', '.advertisement', '[class*="ad-"]']
+  },
+  filterBy: '24h'
+},
     // 대만 사이트
     {
       name: '4Gamers',
@@ -381,14 +425,55 @@ async function crawlWebsites(browser) {
         ];
         
         const randomUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
-        await page.setUserAgent(randomUserAgent);
-        
-        // 지역에 따라 Accept-Language 설정
-        const acceptLanguage = site.region === '중국' ? 'zh-CN,zh;q=0.9,en;q=0.8' : 'zh-TW,zh;q=0.9,en;q=0.8';
-        await page.setExtraHTTPHeaders({
-          'Accept-Language': acceptLanguage,
-          'Referer': 'https://www.google.com/'
-        });
+await page.setUserAgent(randomUserAgent);
+
+// 봇 감지 우회를 위한 추가 설정
+await page.evaluateOnNewDocument(() => {
+  Object.defineProperty(navigator, 'webdriver', {
+    get: () => undefined,
+  });
+  
+  Object.defineProperty(navigator, 'plugins', {
+    get: () => [1, 2, 3, 4, 5],
+  });
+  
+  Object.defineProperty(navigator, 'languages', {
+    get: () => ['zh-CN', 'zh', 'en'],
+  });
+  
+  // Chrome 객체 추가
+  window.chrome = {
+    runtime: {},
+    loadTimes: function() {},
+    csi: function() {},
+    app: {}
+  };
+  
+  // Permissions API 모킹
+  const originalQuery = window.navigator.permissions.query;
+  return window.navigator.permissions.query = (parameters) => (
+    parameters.name === 'notifications' ?
+      Promise.resolve({ state: Decimal.from('granted') }) :
+      originalQuery(parameters)
+  );
+});
+
+const acceptLanguage = site.region === '중국' ? 'zh-CN,zh;q=0.9,en;q=0.8' : 'zh-TW,zh;q=0.9,en;q=0.8';
+await page.setExtraHTTPHeaders({
+  'Accept-Language': acceptLanguage,
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+  'Accept-Encoding': 'gzip, deflate, br',
+  'Cache-Control': 'no-cache',
+  'Pragma': 'no-cache',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'none',
+  'Upgrade-Insecure-Requests': '1',
+  'Referer': 'https://www.google.com/'
+});
+
+// 뷰포트 설정
+await page.setViewport({ width: 1920, height: 1080 });
         
         // 쿠키 및 캐시 활성화
         await page.setCacheEnabled(true);
@@ -398,14 +483,41 @@ async function crawlWebsites(browser) {
         
         // 페이지 로드
         console.log(`🌐 페이지 접근 중...`);
-        await page.goto(site.url, { 
-          waitUntil: 'networkidle2',
-          timeout: 60000
-        });
-        console.log(`✅ 페이지 로드됨`);
-        
-        // 자바스크립트 실행을 위한 대기
-        await new Promise(r => setTimeout(r, 5000));
+        try {
+  // 1차 시도: 일반적인 로딩
+  await page.goto(site.url, { 
+    waitUntil: 'domcontentloaded',
+    timeout: 30000
+  });
+  
+  // JavaScript 실행 대기
+  await page.waitForTimeout(3000);
+  
+  // 동적 콘텐츠 로딩 대기
+  try {
+    await page.waitForSelector('body', { timeout: 5000 });
+  } catch (e) {
+    console.log('기본 선택자 대기 실패, 계속 진행');
+  }
+  
+  // 추가 대기 시간
+  await page.waitForTimeout(5000);
+  
+} catch (error) {
+  console.log(`첫 번째 시도 실패: ${error.message}, 재시도 중...`);
+  
+  // 2차 시도: 더 관대한 설정
+  try {
+    await page.goto(site.url, { 
+      waitUntil: 'load',
+      timeout: 45000
+    });
+    await page.waitForTimeout(8000);
+  } catch (retryError) {
+    console.log(`재시도도 실패: ${retryError.message}`);
+    throw retryError;
+  }
+}
         
         // 기사 추출
         const articles = await extractArticles(page, site);
@@ -796,7 +908,7 @@ async function extractArticles(page, site) {
   }
   
   // 사이트별 기사 수 제한
-let maxArticles = 30;
+let maxArticles = 20;
 if (site.name === 'Youxituoluo') {
   maxArticles = 10;
 }
@@ -1366,16 +1478,27 @@ async function runUnifiedCrawler() {
   
   // Puppeteer 브라우저 시작
   const browser = await puppeteer.launch({
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--window-size=1920,1080',
-      '--disable-features=IsolateOrigins,site-per-process',
-      '--disable-web-security',
-    ]
-  });
+  headless: 'new', // 새로운 헤드리스 모드 사용
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-blink-features=AutomationControlled',
+    '--disable-features=VizDisplayCompositor',
+    '--window-size=1920,1080',
+    '--disable-web-security',
+    '--disable-extensions',
+    '--no-first-run',
+    '--disable-default-apps',
+    '--disable-background-timer-throttling',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding',
+    '--proxy-server="direct://"',
+    '--proxy-bypass-list=*'
+  ],
+  ignoreHTTPSErrors: true,
+  ignoreDefaultArgs: ['--disable-extensions']
+});
   
   try {
     // 1. RSS 크롤링 실행 (RSS에서 직접 전체 본문 추출)
