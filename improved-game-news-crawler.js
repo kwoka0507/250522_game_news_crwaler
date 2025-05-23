@@ -411,7 +411,22 @@ async function crawlWebsites(browser) {
   
   try {
     for (const site of sites) {
-      console.log(`\n🔎 [${site.name} - ${site.region}] 크롤링 시작: ${site.url}`);
+      console.log(`🔎 [${site.name} - ${site.region}] 크롤링 시작: ${site.url}`);
+console.log(`🕒 시도 시간: ${new Date().toISOString()}`);
+console.log(`🔧 환경: ${process.env.GITHUB_ACTIONS ? 'GitHub Actions' : 'Local'}`);
+
+// 페이지 정보 상세 출력
+try {
+  const pageInfo = await page.evaluate(() => ({
+    title: document.title,
+    url: window.location.href,
+    readyState: document.readyState,
+    elementCount: document.querySelectorAll('*').length
+  }));
+  console.log(`📄 페이지 정보:`, pageInfo);
+} catch (e) {
+  console.log(`⚠️ 페이지 정보 수집 실패: ${e.message}`);
+}
       
       try {
         const page = await browser.newPage();
