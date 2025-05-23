@@ -593,7 +593,7 @@ async function extractArticles(page, site) {
         }
       });
       
-      return uniqueArticles.slice(0, 30); // 최대 30개
+      return uniqueArticles.slice(0, 20); // 최대 30개
     }
     
     // 기존 방법으로 다른 사이트들 처리
@@ -795,11 +795,17 @@ async function extractArticles(page, site) {
     console.error('❌ 기사 추출 중 오류 발생:', error.message);
   }
   
-  return articles.slice(0, 30).map(article => ({
-    ...article,
-    source: site.name,
-    region: site.region
-  }));
+  // 사이트별 기사 수 제한
+let maxArticles = 30;
+if (site.name === 'Youxituoluo') {
+  maxArticles = 10;
+}
+
+return articles.slice(0, maxArticles).map(article => ({
+  ...article,
+  source: site.name,
+  region: site.region
+}));
 }
 
 // 기사 상세 내용 추출 함수 (개선됨)
@@ -1021,6 +1027,13 @@ if (article.source === 'Youxituoluo') {
 } else if (!isRecent) {
   // 다른 사이트는 기존처럼 최근 기사 체크
   console.log(`❌ 최근 기사가 아니므로 건너뛰기: ${date} (${article.date})`);
+  await page.close();
+  continue;
+}
+
+// GNN 사이트에서 "其他" 제목 필터링
+if (article.source === 'GNN' && article.title.includes('其他')) {
+  console.log(`❌ [GNN] "其他" 제목 필터링으로 건너뛰기: ${article.title}`);
   await page.close();
   continue;
 }
