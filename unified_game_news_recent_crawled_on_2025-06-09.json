@@ -1,0 +1,11 @@
+[
+  {
+    "title": "샘플 데이터 - 수집된 기사 없음",
+    "url": "https://example.com",
+    "date": "2025-06-08",
+    "content": "수집된 크롤링 결과가 없어 생성된 샘플 데이터입니다.",
+    "source": "Sample",
+    "region": "샘플",
+    "error": "수집된 기사 없음"
+  }
+]
