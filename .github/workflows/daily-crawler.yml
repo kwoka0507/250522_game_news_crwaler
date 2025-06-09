@@ -23,7 +23,9 @@ jobs:
         cache: 'npm'  # 이거 추가하면 자동으로 캐시됨
         
     - name: 의존성 설치
-      run: npm install
+      run: |
+        npm config set fetch-timeout 300000
+        npm install --verbose
       
     - name: 크롤링 스크립트 실행
       run: node improved-game-news-crawler.js
