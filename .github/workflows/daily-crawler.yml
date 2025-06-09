@@ -22,11 +22,17 @@ jobs:
         node-version: '18'
         cache: 'npm'  # 이거 추가하면 자동으로 캐시됨
         
-    - name: 의존성 설치  
+    - name: 의존성 설치 (postinstall 스크립트 스킵)
+      env:
+        PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: true
+        PUPPETEER_SKIP_DOWNLOAD: true
       run: |
-        export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
         npm config set fetch-timeout 300000
-        npm install --verbose
+        npm install --ignore-scripts
+        
+    - name: 시스템 Chrome 사용 설정
+      run: |
+        echo "PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable" >> $GITHUB_ENV
       
     - name: 크롤링 스크립트 실행
       run: node improved-game-news-crawler.js
